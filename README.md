@@ -1,86 +1,37 @@
 # AutoGluon Multi-Dataset Training
 
-Comprehensive training and evaluation script for AutoGluon on multiple diverse datasets including text classification, multimodal classification, and time series forecasting.
+This repository contains a training and evaluation script for AutoGluon across multiple datasets spanning text classification, multimodal classification, and time series forecasting. The goal is to establish baseline performance metrics using AutoGluon's default configurations.
 
-## 🎯 Datasets
+## Datasets
 
-| Dataset | Type | Task | Records | Features |
-|---------|------|------|---------|----------|
+| Dataset | Type | Task | Records | Description |
+|---------|------|------|---------|-------------|
 | **CaseHold** | Text | Classification | ~53K | Legal case holdings |
 | **ScienceQA** | Multimodal | Classification | ~21K | Science Q&A with images |
 | **ANLI R1** | Text | Classification | ~17K | Natural language inference |
 | **Temperature Rain** | Time Series | Forecasting | 22.6M | Weather data (32K stations) |
 
-## ✨ Features
 
-- ✅ **Real temperature_rain dataset** loading with intelligent caching (200x speedup)
-- ✅ **AutoGluon default settings** for fair baseline comparison
-- ✅ **Comprehensive logging**: accuracy, training time, model size, parameters
-- ✅ **Memory optimization**: Configurable memory usage ratios
-- ✅ **Confusion matrices** and classification reports for classification tasks
-- ✅ **Predictions export** for all datasets
-- ✅ **Time series forecasting** with proper frequency handling
-
-## 🚀 Quick Start
 
 ### Prerequisites
-```bash
-python >= 3.10
-21+ GB RAM recommended
-```
+- Python 3.10 or higher
+- 21+ GB RAM recommended for full dataset processing
 
-### Installation
-```bash
-git clone https://github.com/YOUR_USERNAME/autogluon-multi-dataset-training.git
-cd autogluon-multi-dataset-training
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
 
 ### Usage
 ```bash
 python autogluon_multi_dataset_training.py
 ```
 
-## 📊 Results
+## Results
 
-### Temperature Rain (Time Series)
-- **MASE Score**: 0.56 (44% better than naive baseline)
-- **Training Time**: ~36 minutes for 32,072 weather stations
-- **Model Size**: 1,040 MB
-- **Best Model**: Ensemble (Chronos + DirectTabular)
-- **Caching**: First load 10+ min, subsequent loads 3 seconds
 
-### Performance Summary
-| Dataset | Problem Type | Best Model | Score | Training Time |
-|---------|-------------|------------|-------|---------------|
-| Temperature Rain | Time Series | Ensemble | MASE: 0.56 | 36.6 min |
-| CaseHold | Text Classification | TBD | TBD | TBD |
-| ScienceQA | Multimodal | TBD | TBD | TBD |
-| ANLI R1 | Text Classification | TBD | TBD | TBD |
+## Implementation Details
 
-## 🏗️ Architecture
 
-### Data Loading
-- **Cached processing** for large datasets
-- **TSF format parsing** for Monash time series data
-- **Multimodal handling** for images + text
-- **Memory-efficient** data splitting
 
-### Model Training
-- **AutoGluon defaults** (no custom model specifications)
-- **Automatic problem type detection**
-- **Memory usage optimization**
-- **Time-based splitting** for time series
 
-### Evaluation & Export
-- **Comprehensive metrics** logging
-- **Confusion matrices** for classification
-- **Predictions export** to CSV
-- **Model size tracking**
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 autogluon-multi-dataset-training/
@@ -92,61 +43,90 @@ autogluon-multi-dataset-training/
 │   ├── monash_tsf.py                   # Dataset configuration
 │   ├── utils.py                        # TSF parsing utilities
 │   └── data/                           # Dataset files
-└── results/                            # Generated results (gitignored)
+└── autogluon_multi_results/                            # Generated results (gitignored)
     ├── predictions/                    # Model predictions
     ├── confusion_matrices/             # Classification matrices
     └── *.csv                          # Summary results
 ```
 
-## 🔧 Configuration
+## Configuration
 
-### Memory Settings
+### Time Series Settings (Temperature Rain)
 ```python
-# Increase memory usage for large datasets
-ag_args_fit={'ag.max_memory_usage_ratio': 5}
-```
+# TimeSeriesPredictor configuration
+predictor = TimeSeriesPredictor(
+    path=model_dir,
+    target='target',
+    prediction_length=24,  # Predict 24 time steps ahead
+    eval_metric='MASE',
+    freq='D'  # Daily frequency for temperature_rain dataset
+)
 
-### Time Series Settings
-```python
-# Configure prediction horizon and frequency
-TimeSeriesPredictor(
-    prediction_length=24,  # 24-day forecasts
-    freq='D',             # Daily frequency
-    eval_metric='MASE'    # Mean Absolute Scaled Error
+# Training settings
+predictor.fit(
+    train_data=train_df,
+    tuning_data=val_df,
+    presets='medium_quality',
+    time_limit=3000,
+    verbosity=2
 )
 ```
 
-## 📈 Advanced Usage
+### Tabular Settings (CaseHold, ANLI R1)
+```python
+# TabularPredictor configuration for text classification
+predictor = TabularPredictor(
+    label=target_col,
+    path=model_dir,
+    problem_type='multiclass',
+    eval_metric='accuracy'
+)
 
-### Custom Dataset Addition
-1. Add dataset loader function
-2. Update `run_all_experiments()` method
-3. Configure appropriate predictor type
+# Training settings with memory optimization
+predictor.fit(
+    train_data=train_df,
+    tuning_data=val_df,
+    presets='medium_quality',
+    time_limit=3000,
+    verbosity=2,
+    ag_args_fit={'ag.max_memory_usage_ratio': 5}
+)
+```
+
+### Multimodal Settings (ScienceQA)
+```python
+# MultiModalPredictor for datasets with images and text
+predictor = MultiModalPredictor(
+    label=target_col,
+    path=model_dir
+)
+
+# Training settings (combines train and validation data internally)
+predictor.fit(
+    train_data=combined_train_df,
+    time_limit=3000,
+    presets='medium_quality'
+)
+```
+
+## Advanced Usage
+
+### Adding Custom Datasets
+1. Add a dataset loader function following the existing pattern
+2. Update the `run_all_experiments()` method to include the new dataset
+3. Configure the appropriate predictor type for your data
 
 ### Performance Tuning
-- Increase `time_limit` for longer training
-- Use `presets='high_quality'` for better models
-- Adjust `prediction_length` for time series
+- Increase `time_limit` for longer training sessions
+- Use `presets='high_quality'` for better model performance
+- Adjust `prediction_length` for time series forecasting tasks
 
-## 🤝 Contributing
+## License
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+This project is licensed under the MIT License.
 
-## 📄 License
+## Acknowledgments
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [AutoGluon](https://auto.gluon.ai/) for the excellent AutoML framework
+- [AutoGluon](https://auto.gluon.ai/) for the AutoML framework
 - [Monash Time Series Forecasting Archive](https://forecastingdata.org/) for the temperature_rain dataset
 - [Hugging Face Datasets](https://huggingface.co/datasets) for dataset hosting
-
-## 📞 Contact
-
-- GitHub: [@YOUR_USERNAME](https://github.com/YOUR_USERNAME)
-- Issues: [GitHub Issues](https://github.com/YOUR_USERNAME/autogluon-multi-dataset-training/issues)
