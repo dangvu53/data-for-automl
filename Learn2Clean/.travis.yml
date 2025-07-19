@@ -1,0 +1,21 @@
+language: python
+python:
+  - "3.6"
+# command to install dependencies
+before_install: cd python-package/
+install:
+  - pip install codecov
+  - pip install --upgrade setuptools wheel  
+  - pip install --only-binary all -r requirements.txt
+  - python3 setup.py install
+# command to run tests 
+before_script: 
+  - cd ../
+  - pip install pytest
+  - pip install flake8
+script:
+  - flake8 learn2clean
+  - python -m pytest
+  - coverage run --source learn2clean -m pytest
+after_success:
+  - codecov
