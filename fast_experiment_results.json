@@ -1,0 +1,30 @@
+{
+  "meta_learning_fitness": 0.42201834862385323,
+  "best_pipeline_config": {
+    "approach": "objective",
+    "objectives": [
+      "maximize_accuracy"
+    ],
+    "operations": [
+      "('synonym_augment', {'ratio': 0.1, 'minority_boost': 2.0})"
+    ]
+  },
+  "data_sizes": {
+    "original": {
+      "train": 16946,
+      "val": 1000,
+      "test": 1000
+    },
+    "processed": {
+      "train": 18470,
+      "val": 1000,
+      "test": 1000
+    }
+  },
+  "autogluon_performance": "{'accuracy': 0.385, 'balanced_accuracy': np.float64(0.38505871140601683), 'mcc': np.float64(0.07934540673706345)}",
+  "timing": {
+    "processing_time": 0.41790175437927246,
+    "autogluon_time": 1868.060780763626,
+    "total_time": 1918.3846409320831
+  }
+}
