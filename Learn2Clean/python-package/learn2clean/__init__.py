@@ -36,6 +36,6 @@ with warnings.catch_warnings():
     warnings.simplefilter('ignore', category=ImportWarning)
 
 np.seterr(divide='ignore', invalid='ignore')
-np.warnings.filterwarnings('ignore')
+#np.warnings.filterwarnings('ignore')
 
 pd.options.mode.chained_assignment = None

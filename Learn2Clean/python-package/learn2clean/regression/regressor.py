@@ -4,7 +4,7 @@
 import time
 import warnings
 from sklearn.model_selection import cross_val_score
-from pyearth import Earth
+#from pyearth import Earth
 import pandas as pd
 from sklearn.linear_model import LassoCV
 from sklearn.metrics import mean_squared_error

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
 
-
-
 import os
+import sys
 import pandas as pd
 import numpy as np
 import time
@@ -16,6 +15,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import TruncatedSVD
+
+# Add Learn2Clean to path
+sys.path.append('Learn2Clean/python-package')
+try:
+    from learn2clean.duplicate_detection.duplicate_detector import Duplicate_detector
+    from learn2clean.outlier_detection.outlier_detector import Outlier_detector
+    LEARN2CLEAN_AVAILABLE = True
+    print("Learn2Clean components loaded successfully")
+except ImportError as e:
+    print(f"Learn2Clean not available: {e}")
+    LEARN2CLEAN_AVAILABLE = False
 
 # Disable warnings
 warnings.filterwarnings('ignore')
@@ -39,7 +51,174 @@ def format_time(seconds):
         secs = seconds % 60
         return f"{int(hours)}h {int(minutes)}m {secs:.1f}s"
 
-class FixedTextCleaner:
+class AdvancedCleaner:
+    """Advanced data cleaning using Learn2Clean components with TF-IDF embeddings"""
+    
+    def __init__(self, deduplication_strategy='ED', outlier_strategy='LOF', 
+                 outlier_threshold=0.1, verbose=False, 
+                 tfidf_max_features=100, tfidf_ngram_range=(1, 2), svd_components=20):
+        self.deduplication_strategy = deduplication_strategy
+        self.outlier_strategy = outlier_strategy
+        self.outlier_threshold = outlier_threshold
+        self.verbose = verbose
+        
+        # TF-IDF parameters
+        self.tfidf_max_features = tfidf_max_features
+        self.tfidf_ngram_range = tfidf_ngram_range
+        self.svd_components = svd_components
+        
+        # Fitted components
+        self.tfidf_vectorizer = None
+        self.svd_reducer = None
+    
+    def apply(self, data):
+        """Apply advanced cleaning operations with TF-IDF embeddings"""
+        if not LEARN2CLEAN_AVAILABLE:
+            logger.warning("Learn2Clean not available, skipping advanced cleaning")
+            return data
+        
+        try:
+            result = data.copy()
+            original_size = len(result)
+            
+            # Step 1: Extract TF-IDF features for embedding-based operations
+            result_with_features = self._extract_tfidf_features(result)
+            
+            # Step 2: Deduplication using Learn2Clean
+            if self.deduplication_strategy:
+                result_with_features = self._apply_deduplication(result_with_features)
+                logger.info(f"After deduplication: {len(result_with_features)} samples (removed {original_size - len(result_with_features)})")
+            
+            # Step 3: Outlier detection using Learn2Clean  
+            if self.outlier_strategy:
+                result_with_features = self._apply_outlier_detection(result_with_features)
+                logger.info(f"After outlier detection: {len(result_with_features)} samples")
+            
+            # Step 4: Remove temporary feature columns and return
+            feature_cols = [col for col in result_with_features.columns if col.startswith('_feature_') or col.startswith('_tfidf_')]
+            result_cleaned = result_with_features.drop(columns=feature_cols, errors='ignore')
+            
+            logger.info(f"Advanced cleaning: {original_size} -> {len(result_cleaned)} samples")
+            return result_cleaned
+            
+        except Exception as e:
+            logger.warning(f"Advanced cleaning failed: {e}")
+            return data
+    
+    def _extract_tfidf_features(self, data):
+        """Extract TF-IDF features from text for embedding-based operations"""
+        result = data.copy()
+        
+        # Extract basic text features (keep some for complementing TF-IDF)
+        result['_feature_text_length'] = result['text'].str.len()
+        result['_feature_word_count'] = result['text'].str.split().str.len()
+        result['_feature_char_diversity'] = result['text'].apply(
+            lambda x: len(set(x.lower())) / max(len(x), 1)
+        )
+        result['_feature_word_diversity'] = result['text'].apply(
+            lambda x: len(set(x.lower().split())) / max(len(x.split()), 1)
+        )
+        
+        # Extract TF-IDF features
+        logger.info(f"Extracting TF-IDF features (max_features={self.tfidf_max_features}, ngram_range={self.tfidf_ngram_range})")
+        
+        # Initialize TF-IDF vectorizer if not fitted
+        if self.tfidf_vectorizer is None:
+            self.tfidf_vectorizer = TfidfVectorizer(
+                max_features=self.tfidf_max_features,
+                ngram_range=self.tfidf_ngram_range,
+                stop_words='english',
+                lowercase=True,
+                min_df=2,  # Ignore terms that appear in less than 2 documents
+                max_df=0.8,  # Ignore terms that appear in more than 80% of documents
+                sublinear_tf=True  # Apply sublinear tf scaling
+            )
+            
+            # Fit TF-IDF on the text data
+            tfidf_matrix = self.tfidf_vectorizer.fit_transform(result['text'])
+            
+            # Apply dimensionality reduction with SVD if we have too many features
+            if tfidf_matrix.shape[1] > self.svd_components:
+                self.svd_reducer = TruncatedSVD(n_components=self.svd_components, random_state=42)
+                tfidf_reduced = self.svd_reducer.fit_transform(tfidf_matrix)
+                logger.info(f"Applied SVD: {tfidf_matrix.shape[1]} -> {tfidf_reduced.shape[1]} dimensions")
+            else:
+                tfidf_reduced = tfidf_matrix.toarray()
+                self.svd_reducer = None
+                logger.info(f"No SVD needed: using {tfidf_matrix.shape[1]} TF-IDF features directly")
+        else:
+            # Transform using fitted vectorizer
+            tfidf_matrix = self.tfidf_vectorizer.transform(result['text'])
+            if self.svd_reducer is not None:
+                tfidf_reduced = self.svd_reducer.transform(tfidf_matrix)
+            else:
+                tfidf_reduced = tfidf_matrix.toarray()
+        
+        # Add TF-IDF features to dataframe
+        for i in range(tfidf_reduced.shape[1]):
+            result[f'_tfidf_{i}'] = tfidf_reduced[:, i]
+        
+        # Fill any NaN values
+        feature_cols = [col for col in result.columns if col.startswith('_feature_') or col.startswith('_tfidf_')]
+        result[feature_cols] = result[feature_cols].fillna(0)
+        
+        logger.info(f"Extracted {len(feature_cols)} total features ({len([c for c in feature_cols if c.startswith('_tfidf_')])} TF-IDF + {len([c for c in feature_cols if c.startswith('_feature_')])} basic)")
+        
+        return result
+    
+    def _apply_deduplication(self, data):
+        """Apply deduplication using Learn2Clean"""
+        try:
+            # Prepare data in Learn2Clean format
+            dataset_dict = {'train': data, 'test': pd.DataFrame()}
+            
+            # Initialize duplicate detector
+            dup_detector = Duplicate_detector(
+                dataset=dataset_dict,
+                strategy=self.deduplication_strategy,
+                verbose=self.verbose
+            )
+            
+            # Apply deduplication
+            cleaned_dict = dup_detector.transform()
+            
+            return cleaned_dict['train']
+            
+        except Exception as e:
+            logger.warning(f"Deduplication failed: {e}")
+            return data
+    
+    def _apply_outlier_detection(self, data):
+        """Apply outlier detection using Learn2Clean on TF-IDF + basic features"""
+        try:
+            # Get only feature columns for outlier detection
+            feature_cols = [col for col in data.columns if col.startswith('_feature_') or col.startswith('_tfidf_')]
+            
+            if len(feature_cols) == 0:
+                logger.warning("No feature columns for outlier detection")
+                return data
+            
+            logger.info(f"Using {len(feature_cols)} features for outlier detection ({len([c for c in feature_cols if c.startswith('_tfidf_')])} TF-IDF features)")
+            
+            # Prepare data in Learn2Clean format
+            dataset_dict = {'train': data, 'test': pd.DataFrame()}
+            
+            # Initialize outlier detector
+            outlier_detector = Outlier_detector(
+                dataset=dataset_dict,
+                strategy=self.outlier_strategy,
+                threshold=self.outlier_threshold,
+                verbose=self.verbose
+            )
+            
+            # Apply outlier detection
+            cleaned_dict = outlier_detector.transform()
+            
+            return cleaned_dict['train']
+            
+        except Exception as e:
+            logger.warning(f"Outlier detection failed: {e}")
+            return data
     """Always-applied text cleaning with optimizable parameters"""
     
     def __init__(self, lowercase=True, remove_extra_whitespace=True, remove_punctuation=False):
@@ -434,13 +613,45 @@ class HybridExploratoryMetaLearner:
         self.best_pipeline = None
         self.best_fitness = 0.0
 
-        # Define operation pool for exploratory approaches
+        # Define operation pool for exploratory approaches (cleaning removed - handled in preprocessing)
         self.operation_pool = {
-            # Cleaning operations
-            'lowercase': {'apply': [True, False]},
-            'remove_punctuation': {'apply': [True, False]},
-            'normalize_whitespace': {'apply': [True, False]},
-            'remove_numbers': {'apply': [True, False]},
+            # Advanced cleaning operations using Learn2Clean with TF-IDF
+            'advanced_dedup_exact': {
+                'strategy': ['ED'],  # Exact duplicate detection
+                'tfidf_max_features': [50, 100, 200],
+                'svd_components': [10, 20, 30]
+            },
+            'advanced_dedup_approx': {
+                'strategy': ['AD'],  # Approximate duplicate detection with Jaccard
+                'threshold': [0.6, 0.7, 0.8, 0.9],
+                'tfidf_max_features': [100, 200, 300],
+                'svd_components': [15, 25, 35]
+            },
+            'advanced_dedup_metric': {
+                'strategy': ['METRIC'],
+                'metric': ['DL', 'LM', 'JW'],  # Damerau-Levenshtein, Levenshtein, Jaro-Winkler
+                'threshold': [0.5, 0.6, 0.7, 0.8],
+                'tfidf_max_features': [100, 200],
+                'svd_components': [20, 30]
+            },
+            'advanced_outlier_lof': {
+                'strategy': ['LOF'],
+                'threshold': [0.05, 0.1, 0.15, 0.2],  # Percentage of outliers to remove
+                'tfidf_max_features': [100, 150, 200],
+                'svd_components': [15, 20, 25]
+            },
+            'advanced_outlier_zscore': {
+                'strategy': ['ZSB'],
+                'threshold': [0.1, 0.2, 0.3],
+                'tfidf_max_features': [50, 100, 150],
+                'svd_components': [10, 15, 20]
+            },
+            'advanced_outlier_iqr': {
+                'strategy': ['IQR'],
+                'threshold': [0.1, 0.2, 0.3],
+                'tfidf_max_features': [100, 200],
+                'svd_components': [15, 25]
+            },
 
             # Filtering operations (less aggressive to preserve data)
             'length_filter': {
@@ -490,27 +701,36 @@ class HybridExploratoryMetaLearner:
             }
         }
 
-        # Objectives for objective-driven generation
+        # Objectives for objective-driven generation (updated to include advanced cleaning with TF-IDF)
         self.objectives = {
             'maximize_accuracy': [
+                ('advanced_dedup_exact', {'strategy': 'ED', 'tfidf_max_features': 100, 'svd_components': 20}),
                 ('quality_filter', {'threshold_percentile': 30}),
                 ('difficulty_select_balanced', {'threshold_percentile': 50, 'range': 0.2}),
                 ('synonym_augment', {'ratio': 0.1, 'minority_boost': 2.0})
             ],
             'maximize_robustness': [
+                ('advanced_outlier_lof', {'strategy': 'LOF', 'threshold': 0.1, 'tfidf_max_features': 150, 'svd_components': 25}),
                 ('mixed_augment', {'ratio': 0.15, 'minority_boost': 2.0}),
                 ('difficulty_select_hard', {'threshold_percentile': 60, 'ratio': 0.7}),
                 ('insertion_augment', {'ratio': 0.1, 'minority_boost': 1.5})
             ],
             'minimize_data_size': [
+                ('advanced_outlier_iqr', {'strategy': 'IQR', 'threshold': 0.2, 'tfidf_max_features': 100, 'svd_components': 15}),
                 ('quality_filter', {'threshold_percentile': 40}),
                 ('difficulty_select_easy', {'threshold_percentile': 40, 'ratio': 0.6}),
                 ('length_filter', {'min_percentile': 15, 'max_percentile': 85})
             ],
             'maximize_diversity': [
+                ('advanced_dedup_approx', {'strategy': 'AD', 'threshold': 0.8, 'tfidf_max_features': 200, 'svd_components': 30}),
                 ('mixed_augment', {'ratio': 0.2, 'minority_boost': 2.5}),
                 ('random_select', {'ratio': 0.8}),
                 ('class_balance_augment', {'target_ratio': 1.5})
+            ],
+            'clean_and_balance': [
+                ('advanced_dedup_metric', {'strategy': 'METRIC', 'metric': 'DL', 'threshold': 0.7, 'tfidf_max_features': 150, 'svd_components': 25}),
+                ('advanced_outlier_zscore', {'strategy': 'ZSB', 'threshold': 0.15, 'tfidf_max_features': 100, 'svd_components': 20}),
+                ('class_balance_augment', {'target_ratio': 1.2})
             ]
         }
     
@@ -532,13 +752,61 @@ class HybridExploratoryMetaLearner:
     def _generate_staged_pipeline(self):
         """Generate pipeline with logical stages (current approach)"""
         """Generate random pipeline configuration with all stages"""
-        # Stage 1: Cleaning (always included, optimize parameters)
-        cleaner_params = {
-            'lowercase': True,  # Almost always good
-            'remove_extra_whitespace': True,  # Almost always good
-            'remove_punctuation': np.random.choice([True, False])
-        }
-
+        # NOTE: Cleaning is now handled as preprocessing, not part of evolution
+        
+        # Stage 1: Advanced Cleaning (optional - using Learn2Clean with TF-IDF)
+        advanced_cleaning_params = None
+        if np.random.random() < 0.4 and LEARN2CLEAN_AVAILABLE:  # 40% chance to include
+            operation_type = np.random.choice(['dedup', 'outlier', 'both'])
+            
+            # Common TF-IDF parameters
+            tfidf_max_features = np.random.choice([50, 100, 150, 200])
+            svd_components = np.random.choice([10, 15, 20, 25, 30])
+            
+            if operation_type == 'dedup':
+                dedup_strategy = np.random.choice(['ED', 'AD', 'METRIC'])
+                if dedup_strategy == 'AD':
+                    advanced_cleaning_params = {
+                        'deduplication_strategy': dedup_strategy,
+                        'outlier_strategy': None,
+                        'dedup_threshold': np.random.choice([0.6, 0.7, 0.8, 0.9]),
+                        'tfidf_max_features': tfidf_max_features,
+                        'svd_components': svd_components
+                    }
+                elif dedup_strategy == 'METRIC':
+                    advanced_cleaning_params = {
+                        'deduplication_strategy': dedup_strategy,
+                        'outlier_strategy': None,
+                        'dedup_metric': np.random.choice(['DL', 'LM', 'JW']),
+                        'dedup_threshold': np.random.choice([0.5, 0.6, 0.7, 0.8]),
+                        'tfidf_max_features': tfidf_max_features,
+                        'svd_components': svd_components
+                    }
+                else:  # ED
+                    advanced_cleaning_params = {
+                        'deduplication_strategy': dedup_strategy,
+                        'outlier_strategy': None,
+                        'tfidf_max_features': tfidf_max_features,
+                        'svd_components': svd_components
+                    }
+            elif operation_type == 'outlier':
+                outlier_strategy = np.random.choice(['LOF', 'ZSB', 'IQR'])
+                advanced_cleaning_params = {
+                    'deduplication_strategy': None,
+                    'outlier_strategy': outlier_strategy,
+                    'outlier_threshold': np.random.choice([0.05, 0.1, 0.15, 0.2]),
+                    'tfidf_max_features': tfidf_max_features,
+                    'svd_components': svd_components
+                }
+            else:  # both
+                advanced_cleaning_params = {
+                    'deduplication_strategy': np.random.choice(['ED', 'AD']),
+                    'outlier_strategy': np.random.choice(['LOF', 'ZSB', 'IQR']),
+                    'outlier_threshold': np.random.choice([0.05, 0.1, 0.15]),
+                    'tfidf_max_features': tfidf_max_features,
+                    'svd_components': svd_components
+                }
+        
         # Stage 2: Filtering (optional)
         filter_params = None
         if np.random.random() < 0.7:  # 70% chance to include
@@ -568,7 +836,7 @@ class HybridExploratoryMetaLearner:
         return {
             'approach': 'staged',
             'operations': [
-                ('clean', cleaner_params),
+                ('advanced_clean', advanced_cleaning_params) if advanced_cleaning_params else None,
                 ('filter', filter_params) if filter_params else None,
                 ('select', selector_params) if selector_params else None,
                 ('augment', augmenter_params) if augmenter_params else None
@@ -661,8 +929,13 @@ class HybridExploratoryMetaLearner:
         """Get operations that make sense given current data state"""
         available = []
 
-        # Always available: basic cleaning
-        available.extend(['lowercase', 'normalize_whitespace'])
+        # Advanced cleaning operations (if Learn2Clean is available)
+        if LEARN2CLEAN_AVAILABLE:
+            available.extend(['advanced_dedup_exact', 'advanced_outlier_lof'])
+            
+            # Add more aggressive advanced cleaning if data quality is low
+            if data_state['quality'] < 0.5:
+                available.extend(['advanced_dedup_approx', 'advanced_outlier_zscore'])
 
         # If data is large, selection operations are useful
         if data_state['size'] > 0.7:
@@ -722,8 +995,9 @@ class HybridExploratoryMetaLearner:
                 new_state['balance'] += 0.2
 
         elif op_name in ['lowercase', 'normalize_whitespace', 'remove_punctuation']:
-            # Cleaning improves quality slightly
-            new_state['quality'] += 0.05
+            # Skip cleaning operations - now handled in preprocessing
+            logger.info(f"Skipping cleaning operation {op_name} - handled in preprocessing")
+            pass
 
         # Clamp values between 0 and 1
         for key in new_state:
@@ -734,10 +1008,12 @@ class HybridExploratoryMetaLearner:
     def evaluate_pipeline(self, pipeline_config, train_data, target_col):
         """Evaluate flexible pipeline using only training data with data retention penalty"""
         try:
-            original_size = len(train_data)
+            # Apply mandatory cleaning first (not part of evolution)
+            cleaned_data = self._apply_mandatory_cleaning(train_data)
+            original_size = len(cleaned_data)
 
             # Apply operations in sequence
-            processed_train = self._apply_pipeline_operations(pipeline_config, train_data)
+            processed_train = self._apply_pipeline_operations(pipeline_config, cleaned_data)
             processed_size = len(processed_train)
 
             # Calculate data retention ratio
@@ -771,6 +1047,15 @@ class HybridExploratoryMetaLearner:
             logger.warning(f"Pipeline evaluation failed: {e}")
             return 0.0
 
+    def _apply_mandatory_cleaning(self, data):
+        """Apply mandatory text cleaning that's always performed before pipeline"""
+        cleaner = FixedTextCleaner(
+            lowercase=True,
+            remove_extra_whitespace=True,
+            remove_punctuation=False  # Conservative default
+        )
+        return cleaner.apply(data)
+
     def _apply_pipeline_operations(self, pipeline_config, data):
         """Apply sequence of operations to data"""
         current_data = data.copy()
@@ -783,8 +1068,12 @@ class HybridExploratoryMetaLearner:
 
             try:
                 if op_name == 'clean':
-                    # Apply cleaning operations
-                    current_data = self._apply_cleaning(current_data, params)
+                    # Skip cleaning operations since they're now handled in preprocessing
+                    logger.info("Skipping cleaning operation - handled in preprocessing")
+                    continue
+                elif op_name == 'advanced_clean':
+                    # Apply advanced cleaning operations
+                    current_data = self._apply_advanced_cleaning(current_data, params)
                 elif op_name == 'filter':
                     # Apply filtering operations
                     current_data = self._apply_filtering(current_data, params)
@@ -803,6 +1092,38 @@ class HybridExploratoryMetaLearner:
                 continue
 
         return current_data
+
+    def _apply_advanced_cleaning(self, data, params):
+        """Apply advanced cleaning operations using Learn2Clean with TF-IDF"""
+        if not LEARN2CLEAN_AVAILABLE:
+            logger.warning("Learn2Clean not available, skipping advanced cleaning")
+            return data
+        
+        # Extract parameters
+        dedup_strategy = params.get('deduplication_strategy')
+        outlier_strategy = params.get('outlier_strategy')
+        outlier_threshold = params.get('outlier_threshold', 0.1)
+        dedup_threshold = params.get('dedup_threshold', 0.8)
+        dedup_metric = params.get('dedup_metric', 'DL')
+        
+        # TF-IDF parameters
+        tfidf_max_features = params.get('tfidf_max_features', 100)
+        tfidf_ngram_range = params.get('tfidf_ngram_range', (1, 2))
+        svd_components = params.get('svd_components', 20)
+        
+        # Create AdvancedCleaner with TF-IDF parameters
+        advanced_cleaner = AdvancedCleaner(
+            deduplication_strategy=dedup_strategy,
+            outlier_strategy=outlier_strategy,
+            outlier_threshold=outlier_threshold,
+            verbose=False,
+            tfidf_max_features=tfidf_max_features,
+            tfidf_ngram_range=tfidf_ngram_range,
+            svd_components=svd_components
+        )
+        
+        # Apply advanced cleaning
+        return advanced_cleaner.apply(data)
 
     def _apply_cleaning(self, data, params):
         """Apply cleaning operations"""
@@ -828,28 +1149,51 @@ class HybridExploratoryMetaLearner:
 
     def _apply_individual_operation(self, data, op_name, params):
         """Apply individual operations from the operation pool"""
-        if op_name == 'lowercase':
-            if params.get('apply', True):
-                data = data.copy()
-                data['text'] = data['text'].str.lower()
+        # Skip cleaning operations - handled in preprocessing
+        if op_name in ['lowercase', 'remove_punctuation', 'normalize_whitespace', 'remove_numbers']:
+            logger.info(f"Skipping cleaning operation {op_name} - handled in preprocessing")
+            return data
 
-        elif op_name == 'remove_punctuation':
-            if params.get('apply', True):
-                import string
-                data = data.copy()
-                data['text'] = data['text'].str.translate(str.maketrans('', '', string.punctuation))
+        # Handle advanced cleaning operations
+        if op_name.startswith('advanced_'):
+            if not LEARN2CLEAN_AVAILABLE:
+                logger.warning(f"Learn2Clean not available, skipping {op_name}")
+                return data
+            
+            if 'dedup' in op_name:
+                strategy = params.get('strategy', 'ED')
+                threshold = params.get('threshold', 0.8)
+                metric = params.get('metric', 'DL')
+                tfidf_max_features = params.get('tfidf_max_features', 100)
+                svd_components = params.get('svd_components', 20)
+                
+                advanced_params = {
+                    'deduplication_strategy': strategy,
+                    'outlier_strategy': None,
+                    'dedup_threshold': threshold,
+                    'dedup_metric': metric,
+                    'tfidf_max_features': tfidf_max_features,
+                    'svd_components': svd_components
+                }
+                return self._apply_advanced_cleaning(data, advanced_params)
+                
+            elif 'outlier' in op_name:
+                strategy = params.get('strategy', 'LOF')
+                threshold = params.get('threshold', 0.1)
+                tfidf_max_features = params.get('tfidf_max_features', 100)
+                svd_components = params.get('svd_components', 20)
+                
+                advanced_params = {
+                    'deduplication_strategy': None,
+                    'outlier_strategy': strategy,
+                    'outlier_threshold': threshold,
+                    'tfidf_max_features': tfidf_max_features,
+                    'svd_components': svd_components
+                }
+                return self._apply_advanced_cleaning(data, advanced_params)
 
-        elif op_name == 'normalize_whitespace':
-            if params.get('apply', True):
-                data = data.copy()
-                data['text'] = data['text'].str.replace(r'\s+', ' ', regex=True).str.strip()
-
-        elif op_name == 'remove_numbers':
-            if params.get('apply', True):
-                data = data.copy()
-                data['text'] = data['text'].str.replace(r'\d+', '', regex=True)
-
-        elif op_name == 'length_filter':
+        # Regular operations
+        if op_name == 'length_filter':
             text_lengths = data['text'].str.len()
             min_threshold = np.percentile(text_lengths, params['min_percentile'])
             max_threshold = np.percentile(text_lengths, params['max_percentile'])
@@ -1165,25 +1509,44 @@ def run_fast_experiment():
     for i, operation in enumerate(best_pipeline_config['operations']):
         if operation is not None:
             op_name, params = operation
-            logger.info(f"    {i+1}. {op_name}: {params}")
+            if op_name == 'advanced_clean':
+                tfidf_info = f"tfidf_features={params.get('tfidf_max_features', 'N/A')}, svd_comp={params.get('svd_components', 'N/A')}"
+                logger.info(f"    {i+1}. {op_name}: dedup={params.get('deduplication_strategy', 'None')}, outlier={params.get('outlier_strategy', 'None')}, threshold={params.get('outlier_threshold', 'N/A')}, {tfidf_info}")
+            else:
+                logger.info(f"    {i+1}. {op_name}: {params}")
         else:
             logger.info(f"    {i+1}. (skipped)")
 
     # Apply discovered pipeline to FULL training data
     processing_start = time.time()
-    processed_train = meta_learner._apply_pipeline_operations(best_pipeline_config, train_df)
+    
+    # Step 1: Apply mandatory cleaning to all datasets
+    logger.info("Applying mandatory text cleaning to all datasets...")
+    cleaned_train = meta_learner._apply_mandatory_cleaning(train_df)
+    cleaned_val = meta_learner._apply_mandatory_cleaning(val_df)
+    cleaned_test = meta_learner._apply_mandatory_cleaning(test_df)
+    
+    logger.info("Cleaning completed:")
+    logger.info(f"  Train: {len(train_df)} -> {len(cleaned_train)} (-{len(train_df) - len(cleaned_train)} samples)")
+    logger.info(f"  Val: {len(val_df)} -> {len(cleaned_val)} (-{len(val_df) - len(cleaned_val)} samples)")
+    logger.info(f"  Test: {len(test_df)} -> {len(cleaned_test)} (-{len(test_df) - len(cleaned_test)} samples)")
+    
+    # Step 2: Apply discovered pipeline to cleaned training data only
+    logger.info("Applying discovered pipeline to cleaned training data...")
+    processed_train = meta_learner._apply_pipeline_operations(best_pipeline_config, cleaned_train)
 
-    # Keep val/test completely untouched - no processing at all
-    processed_val = val_df.copy()  # Original validation data
-    processed_test = test_df.copy()  # Original test data
+    # Keep val/test with only mandatory cleaning - no discovered pipeline applied
+    processed_val = cleaned_val.copy()
+    processed_test = cleaned_test.copy()
 
     processing_time = time.time() - processing_start
     logger.info(f"Data processing completed in {format_time(processing_time)}")
 
     logger.info("Data sizes after processing:")
     logger.info(f"  Train: {len(train_df)} -> {len(processed_train)} ({len(processed_train)/len(train_df)*100:.1f}%)")
-    logger.info(f"  Val: {len(val_df)} -> {len(processed_val)} ({len(processed_val)/len(val_df)*100:.1f}%)")
-    logger.info(f"  Test: {len(test_df)} -> {len(processed_test)} ({len(processed_test)/len(test_df)*100:.1f}%)")
+    logger.info(f"    (Cleaning: {len(train_df)} -> {len(cleaned_train)}, Pipeline: {len(cleaned_train)} -> {len(processed_train)})")
+    logger.info(f"  Val: {len(val_df)} -> {len(processed_val)} ({len(processed_val)/len(val_df)*100:.1f}%) [cleaning only]")
+    logger.info(f"  Test: {len(test_df)} -> {len(processed_test)} ({len(processed_test)/len(test_df)*100:.1f}%) [cleaning only]")
 
     # 4. Train AutoGluon (using your exact settings)
     logger.info("\n" + "="*60)
