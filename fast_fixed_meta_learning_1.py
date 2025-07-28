@@ -8,6 +8,7 @@ import numpy as np
 import time
 import logging
 import warnings
+import string
 from datetime import datetime
 from datasets import load_dataset
 from autogluon.tabular import TabularPredictor
@@ -18,15 +19,13 @@ from sklearn.metrics import accuracy_score
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
 
-# Add Learn2Clean to path
-sys.path.append('Learn2Clean/python-package')
+# Use modern Learn2Clean implementation instead of original package
 try:
-    from learn2clean.duplicate_detection.duplicate_detector import Duplicate_detector
-    from learn2clean.outlier_detection.outlier_detector import Outlier_detector
+    from learn2clean_implement import ModernDuplicateDetector, ModernOutlierDetector, Learn2CleanProcessor
     LEARN2CLEAN_AVAILABLE = True
-    print("Learn2Clean components loaded successfully")
+    print("Modern Learn2Clean implementation loaded successfully")
 except ImportError as e:
-    print(f"Learn2Clean not available: {e}")
+    print(f"Modern Learn2Clean implementation not available: {e}")
     LEARN2CLEAN_AVAILABLE = False
 
 # Disable warnings
@@ -50,175 +49,8 @@ def format_time(seconds):
         minutes = (seconds % 3600) // 60
         secs = seconds % 60
         return f"{int(hours)}h {int(minutes)}m {secs:.1f}s"
-
-class AdvancedCleaner:
-    """Advanced data cleaning using Learn2Clean components with TF-IDF embeddings"""
     
-    def __init__(self, deduplication_strategy='ED', outlier_strategy='LOF', 
-                 outlier_threshold=0.1, verbose=False, 
-                 tfidf_max_features=100, tfidf_ngram_range=(1, 2), svd_components=20):
-        self.deduplication_strategy = deduplication_strategy
-        self.outlier_strategy = outlier_strategy
-        self.outlier_threshold = outlier_threshold
-        self.verbose = verbose
-        
-        # TF-IDF parameters
-        self.tfidf_max_features = tfidf_max_features
-        self.tfidf_ngram_range = tfidf_ngram_range
-        self.svd_components = svd_components
-        
-        # Fitted components
-        self.tfidf_vectorizer = None
-        self.svd_reducer = None
-    
-    def apply(self, data):
-        """Apply advanced cleaning operations with TF-IDF embeddings"""
-        if not LEARN2CLEAN_AVAILABLE:
-            logger.warning("Learn2Clean not available, skipping advanced cleaning")
-            return data
-        
-        try:
-            result = data.copy()
-            original_size = len(result)
-            
-            # Step 1: Extract TF-IDF features for embedding-based operations
-            result_with_features = self._extract_tfidf_features(result)
-            
-            # Step 2: Deduplication using Learn2Clean
-            if self.deduplication_strategy:
-                result_with_features = self._apply_deduplication(result_with_features)
-                logger.info(f"After deduplication: {len(result_with_features)} samples (removed {original_size - len(result_with_features)})")
-            
-            # Step 3: Outlier detection using Learn2Clean  
-            if self.outlier_strategy:
-                result_with_features = self._apply_outlier_detection(result_with_features)
-                logger.info(f"After outlier detection: {len(result_with_features)} samples")
-            
-            # Step 4: Remove temporary feature columns and return
-            feature_cols = [col for col in result_with_features.columns if col.startswith('_feature_') or col.startswith('_tfidf_')]
-            result_cleaned = result_with_features.drop(columns=feature_cols, errors='ignore')
-            
-            logger.info(f"Advanced cleaning: {original_size} -> {len(result_cleaned)} samples")
-            return result_cleaned
-            
-        except Exception as e:
-            logger.warning(f"Advanced cleaning failed: {e}")
-            return data
-    
-    def _extract_tfidf_features(self, data):
-        """Extract TF-IDF features from text for embedding-based operations"""
-        result = data.copy()
-        
-        # Extract basic text features (keep some for complementing TF-IDF)
-        result['_feature_text_length'] = result['text'].str.len()
-        result['_feature_word_count'] = result['text'].str.split().str.len()
-        result['_feature_char_diversity'] = result['text'].apply(
-            lambda x: len(set(x.lower())) / max(len(x), 1)
-        )
-        result['_feature_word_diversity'] = result['text'].apply(
-            lambda x: len(set(x.lower().split())) / max(len(x.split()), 1)
-        )
-        
-        # Extract TF-IDF features
-        logger.info(f"Extracting TF-IDF features (max_features={self.tfidf_max_features}, ngram_range={self.tfidf_ngram_range})")
-        
-        # Initialize TF-IDF vectorizer if not fitted
-        if self.tfidf_vectorizer is None:
-            self.tfidf_vectorizer = TfidfVectorizer(
-                max_features=self.tfidf_max_features,
-                ngram_range=self.tfidf_ngram_range,
-                stop_words='english',
-                lowercase=True,
-                min_df=2,  # Ignore terms that appear in less than 2 documents
-                max_df=0.8,  # Ignore terms that appear in more than 80% of documents
-                sublinear_tf=True  # Apply sublinear tf scaling
-            )
-            
-            # Fit TF-IDF on the text data
-            tfidf_matrix = self.tfidf_vectorizer.fit_transform(result['text'])
-            
-            # Apply dimensionality reduction with SVD if we have too many features
-            if tfidf_matrix.shape[1] > self.svd_components:
-                self.svd_reducer = TruncatedSVD(n_components=self.svd_components, random_state=42)
-                tfidf_reduced = self.svd_reducer.fit_transform(tfidf_matrix)
-                logger.info(f"Applied SVD: {tfidf_matrix.shape[1]} -> {tfidf_reduced.shape[1]} dimensions")
-            else:
-                tfidf_reduced = tfidf_matrix.toarray()
-                self.svd_reducer = None
-                logger.info(f"No SVD needed: using {tfidf_matrix.shape[1]} TF-IDF features directly")
-        else:
-            # Transform using fitted vectorizer
-            tfidf_matrix = self.tfidf_vectorizer.transform(result['text'])
-            if self.svd_reducer is not None:
-                tfidf_reduced = self.svd_reducer.transform(tfidf_matrix)
-            else:
-                tfidf_reduced = tfidf_matrix.toarray()
-        
-        # Add TF-IDF features to dataframe
-        for i in range(tfidf_reduced.shape[1]):
-            result[f'_tfidf_{i}'] = tfidf_reduced[:, i]
-        
-        # Fill any NaN values
-        feature_cols = [col for col in result.columns if col.startswith('_feature_') or col.startswith('_tfidf_')]
-        result[feature_cols] = result[feature_cols].fillna(0)
-        
-        logger.info(f"Extracted {len(feature_cols)} total features ({len([c for c in feature_cols if c.startswith('_tfidf_')])} TF-IDF + {len([c for c in feature_cols if c.startswith('_feature_')])} basic)")
-        
-        return result
-    
-    def _apply_deduplication(self, data):
-        """Apply deduplication using Learn2Clean"""
-        try:
-            # Prepare data in Learn2Clean format
-            dataset_dict = {'train': data, 'test': pd.DataFrame()}
-            
-            # Initialize duplicate detector
-            dup_detector = Duplicate_detector(
-                dataset=dataset_dict,
-                strategy=self.deduplication_strategy,
-                verbose=self.verbose
-            )
-            
-            # Apply deduplication
-            cleaned_dict = dup_detector.transform()
-            
-            return cleaned_dict['train']
-            
-        except Exception as e:
-            logger.warning(f"Deduplication failed: {e}")
-            return data
-    
-    def _apply_outlier_detection(self, data):
-        """Apply outlier detection using Learn2Clean on TF-IDF + basic features"""
-        try:
-            # Get only feature columns for outlier detection
-            feature_cols = [col for col in data.columns if col.startswith('_feature_') or col.startswith('_tfidf_')]
-            
-            if len(feature_cols) == 0:
-                logger.warning("No feature columns for outlier detection")
-                return data
-            
-            logger.info(f"Using {len(feature_cols)} features for outlier detection ({len([c for c in feature_cols if c.startswith('_tfidf_')])} TF-IDF features)")
-            
-            # Prepare data in Learn2Clean format
-            dataset_dict = {'train': data, 'test': pd.DataFrame()}
-            
-            # Initialize outlier detector
-            outlier_detector = Outlier_detector(
-                dataset=dataset_dict,
-                strategy=self.outlier_strategy,
-                threshold=self.outlier_threshold,
-                verbose=self.verbose
-            )
-            
-            # Apply outlier detection
-            cleaned_dict = outlier_detector.transform()
-            
-            return cleaned_dict['train']
-            
-        except Exception as e:
-            logger.warning(f"Outlier detection failed: {e}")
-            return data
+class FixedTextCleaner:
     """Always-applied text cleaning with optimizable parameters"""
     
     def __init__(self, lowercase=True, remove_extra_whitespace=True, remove_punctuation=False):
@@ -244,6 +76,149 @@ class AdvancedCleaner:
         result = result[result[text_col].str.len() > 0].reset_index(drop=True)
         
         return result
+
+class AdvancedCleaner:
+    """Advanced data cleaning using modern duplicate detection and outlier detection with TF-IDF embeddings"""
+    
+    def __init__(self, deduplication_strategy='exact', outlier_strategy='lof', 
+                 outlier_threshold=0.1, verbose=False, 
+                 tfidf_max_features=100, tfidf_ngram_range=(1, 2), svd_components=20):
+        # Map old parameter names to new ones for compatibility
+        self.deduplication_strategy = deduplication_strategy
+        self.outlier_strategy = outlier_strategy
+        self.outlier_threshold = outlier_threshold
+        self.verbose = verbose
+        
+        # TF-IDF parameters
+        self.tfidf_max_features = tfidf_max_features
+        self.tfidf_ngram_range = tfidf_ngram_range
+        self.svd_components = svd_components
+        
+        # Fitted components
+        self.tfidf_vectorizer = None
+        self.svd_reducer = None
+        
+        # Map strategy names for compatibility
+        strategy_mapping = {
+            'ED': 'exact',
+            'AD': 'fuzzy', 
+            'METRIC': 'semantic',
+            'exact': 'exact',
+            'fuzzy': 'fuzzy',
+            'semantic': 'semantic'
+        }
+        
+        outlier_mapping = {
+            'LOF': 'lof',
+            'ZSB': 'zscore',
+            'IQR': 'iqr',
+            'lof': 'lof',
+            'zscore': 'zscore',
+            'iqr': 'iqr'
+        }
+        
+        self.dedup_strategy_mapped = strategy_mapping.get(self.deduplication_strategy, 'exact')
+        self.outlier_strategy_mapped = outlier_mapping.get(self.outlier_strategy, 'lof')
+    
+    def apply(self, data):
+        """Apply advanced cleaning operations with TF-IDF embeddings using modern implementation"""
+        if not LEARN2CLEAN_AVAILABLE:
+            if self.verbose:
+                logger.warning("Modern Learn2Clean implementation not available, skipping advanced cleaning")
+            return data
+        
+        # Always use modern implementation
+        return self._apply_modern_cleaning(data)
+    
+    def _apply_modern_cleaning(self, data):
+        """Apply cleaning using modern implementation"""
+        result = data.copy()
+        
+        try:
+            # Import our modern implementations
+            from learn2clean_implement import ModernDuplicateDetector, ModernOutlierDetector
+            
+            # Apply deduplication if strategy is specified
+            if self.deduplication_strategy and self.deduplication_strategy.lower() not in ['none', 'null']:
+                if self.verbose:
+                    logger.info(f"Applying modern duplicate detection with strategy: {self.dedup_strategy_mapped}")
+                
+                # Create duplicate detector
+                duplicate_detector = ModernDuplicateDetector(
+                    strategy=self.dedup_strategy_mapped,
+                    threshold=0.8,
+                    text_columns=['text'],
+                    verbose=self.verbose
+                )
+                
+                result = duplicate_detector.detect_and_remove_duplicates(result)
+            
+            # Apply outlier detection if strategy is specified
+            if self.outlier_strategy and self.outlier_strategy.lower() not in ['none', 'null']:
+                if self.verbose:
+                    logger.info(f"Applying modern outlier detection with strategy: {self.outlier_strategy_mapped}")
+                
+                # Create outlier detector
+                outlier_detector = ModernOutlierDetector(
+                    strategy=self.outlier_strategy_mapped,
+                    contamination=self.outlier_threshold,
+                    text_columns=['text'],
+                    verbose=self.verbose
+                )
+                
+                result = outlier_detector.detect_and_remove_outliers(result)
+            
+        except ImportError as e:
+            if self.verbose:
+                logger.warning(f"Modern implementation not available: {e}")
+        except Exception as e:
+            if self.verbose:
+                logger.error(f"Error in modern cleaning: {e}")
+        
+        return result
+    
+    def _extract_tfidf_features(self, data):
+        """Extract TF-IDF features from text data"""
+        if 'text' not in data.columns:
+            return np.array([])
+        
+        try:
+            # Initialize TF-IDF vectorizer if not already done
+            if self.tfidf_vectorizer is None:
+                self.tfidf_vectorizer = TfidfVectorizer(
+                    max_features=self.tfidf_max_features,
+                    ngram_range=self.tfidf_ngram_range,
+                    stop_words='english',
+                    min_df=2,
+                    max_df=0.95,
+                    sublinear_tf=True
+                )
+                
+                # Fit and transform
+                tfidf_features = self.tfidf_vectorizer.fit_transform(data['text'].fillna(''))
+            else:
+                # Transform only
+                tfidf_features = self.tfidf_vectorizer.transform(data['text'].fillna(''))
+            
+            # Convert to dense array
+            tfidf_dense = tfidf_features.toarray()
+            
+            # Apply SVD if features exceed desired dimensions
+            if tfidf_dense.shape[1] > self.svd_components:
+                if self.svd_reducer is None:
+                    self.svd_reducer = TruncatedSVD(n_components=self.svd_components, random_state=42)
+                    tfidf_reduced = self.svd_reducer.fit_transform(tfidf_dense)
+                else:
+                    tfidf_reduced = self.svd_reducer.transform(tfidf_dense)
+                
+                return tfidf_reduced
+            else:
+                return tfidf_dense
+                
+        except Exception as e:
+            if self.verbose:
+                logger.error(f"Error extracting TF-IDF features: {e}")
+            return np.array([])
 
 class FixedTextFilter:
     """Learn quality criteria from training data with improved metrics"""
@@ -1094,9 +1069,9 @@ class HybridExploratoryMetaLearner:
         return current_data
 
     def _apply_advanced_cleaning(self, data, params):
-        """Apply advanced cleaning operations using Learn2Clean with TF-IDF"""
+        """Apply advanced cleaning operations using modern Learn2Clean implementation"""
         if not LEARN2CLEAN_AVAILABLE:
-            logger.warning("Learn2Clean not available, skipping advanced cleaning")
+            logger.warning("Modern Learn2Clean implementation not available, skipping advanced cleaning")
             return data
         
         # Extract parameters

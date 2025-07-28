@@ -1,12 +1,14 @@
 {
-  "meta_learning_fitness": 0.42201834862385323,
+  "meta_learning_fitness": 0.590881913303438,
   "best_pipeline_config": {
-    "approach": "objective",
-    "objectives": [
-      "maximize_accuracy"
-    ],
+    "approach": "random",
     "operations": [
-      "('synonym_augment', {'ratio': 0.1, 'minority_boost': 2.0})"
+      "('advanced_outlier_zscore', {'strategy': 'ZSB', 'threshold': 0.3, 'tfidf_max_features': 150, 'svd_components': 20})",
+      "('advanced_dedup_metric', {'strategy': 'METRIC', 'metric': 'DL', 'threshold': 0.6, 'tfidf_max_features': 200, 'svd_components': 20})",
+      "('class_balance_augment', {'target_ratio': 1.0})",
+      "('advanced_outlier_iqr', {'strategy': 'IQR', 'threshold': 0.1, 'tfidf_max_features': 200, 'svd_components': 15})",
+      "('difficulty_select_balanced', {'threshold_percentile': 50, 'range': 0.4})",
+      "('deletion_augment', {'ratio': 0.03, 'minority_boost': 1.5})"
     ]
   },
   "data_sizes": {
@@ -16,15 +18,15 @@
       "test": 1000
     },
     "processed": {
-      "train": 18470,
+      "train": 18907,
       "val": 1000,
       "test": 1000
     }
   },
-  "autogluon_performance": "{'accuracy': 0.385, 'balanced_accuracy': np.float64(0.38505871140601683), 'mcc': np.float64(0.07934540673706345)}",
+  "autogluon_performance": "{'accuracy': 0.376, 'balanced_accuracy': 0.3760556964149779, 'mcc': 0.06472115074827779}",
   "timing": {
-    "processing_time": 0.41790175437927246,
-    "autogluon_time": 1868.060780763626,
-    "total_time": 1918.3846409320831
+    "processing_time": 14.675834655761719,
+    "autogluon_time": 350.47983264923096,
+    "total_time": 2116.736960172653
   }
 }
