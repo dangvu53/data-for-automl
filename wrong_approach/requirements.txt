@@ -6,3 +6,7 @@ seaborn>=0.13.0
 pillow>=11.0.0
 pandas>=2.2.0
 numpy>=2.1.0
+sentence-transformers
+tpot
+torch
+deap

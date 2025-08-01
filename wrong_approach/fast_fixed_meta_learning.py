@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 
-
-
-
 import os
 import pandas as pd
 import numpy as np
 import time
 import logging
 import warnings
+import string
 from datetime import datetime
 from datasets import load_dataset
 from autogluon.tabular import TabularPredictor
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score
@@ -1083,53 +1084,138 @@ def load_anli_dataset():
     except Exception as e:
         logger.error(f"Error loading ANLI: {e}")
         return None, None, None, None
-
-def load_casehold_dataset(self):
-        """Load and prepare CaseHold dataset"""
-        start_time = time.time()
-        logger.info("Loading CaseHold dataset...")
         
-        try:
-            dataset = load_dataset("MothMalone/SLMS-KD-Benchmarks", "casehold")
+def load_dataset_from_csv(base_path, dataset_name=None, label_column='label'):
+    """Generic function to load any dataset from CSV files
+    
+    Args:
+        base_path: Path to directory containing train_subset.csv, val_subset.csv, and test_subset.csv
+        dataset_name: Optional name for logging purposes
+        label_column: Name of the label column (defaults to 'label')
+    
+    Returns:
+        train_df, val_df, test_df, label_column
+    """
+    start_time = time.time()
+    if dataset_name:
+        logger.info(f"Loading {dataset_name} dataset from {base_path}...")
+    else:
+        logger.info(f"Loading dataset from {base_path}...")
+
+    try:
+        # Load CSV files
+        train_df = pd.read_csv(f"{base_path}/train_subset.csv")
+        val_df = pd.read_csv(f"{base_path}/val_subset.csv")
+        test_df = pd.read_csv(f"{base_path}/test_subset.csv")
+        
+        # Ensure text column exists - construct if needed based on available columns
+        if 'text' not in train_df.columns:
+            # For ANLI dataset with premise and hypothesis
+            if 'premise' in train_df.columns and 'hypothesis' in train_df.columns:
+                for df in [train_df, val_df, test_df]:
+                    df['text'] = df['premise'] + " [SEP] " + df['hypothesis']
             
-            def prepare_casehold_data(split_data):
-                data = []
-                for item in split_data:
-                    # Combine citing prompt with all holdings for context
-                    text_features = item['citing_prompt']
-                    for i in range(5):  # holdings 0-4
-                        text_features += f" [HOLDING_{i}] " + item[f'holding_{i}']
-                    
-                    data.append({
-                        'text': text_features,
-                        'label': item['label']
-                    })
-                return pd.DataFrame(data)
-            
-            train_df = prepare_casehold_data(dataset['train'])
-            val_df = prepare_casehold_data(dataset['validation'])
-            test_df = prepare_casehold_data(dataset['test'])
-            
-            load_time = time.time() - start_time
-            logger.info(f"CaseHold loaded: Train={len(train_df)}, Val={len(val_df)}, Test={len(test_df)}")
-            logger.info(f"CaseHold loading time: {format_time(load_time)}")
-            return train_df, val_df, test_df, 'label'
-            
-        except Exception as e:
-            logger.error(f"Error loading CaseHold: {e}")
+            # For CaseHold with citing_prompt and holdings
+            elif 'citing_prompt' in train_df.columns and 'holding_0' in train_df.columns:
+                for df in [train_df, val_df, test_df]:
+                    holdings = [df[f'holding_{i}'] for i in range(5) if f'holding_{i}' in df.columns]
+                    df['text'] = df['citing_prompt'] + " [SEP] " + " [SEP] ".join(holdings)
+        
+        load_time = time.time() - start_time
+        logger.info(f"Dataset loaded from CSV in {format_time(load_time)}")
+        logger.info(f"Sizes - Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
+        
+        # Verify label column exists
+        if label_column not in train_df.columns:
+            available_columns = ', '.join(train_df.columns)
+            logger.error(f"Label column '{label_column}' not found. Available columns: {available_columns}")
             return None, None, None, None
+            
+        return train_df, val_df, test_df, label_column
+
+    except Exception as e:
+        logger.error(f"Error loading dataset from CSV: {e}")
+        return None, None, None, None
+
+def load_casehold_dataset():
+    """Load and prepare CaseHold dataset"""
+    start_time = time.time()
+    logger.info("Loading CaseHold dataset...")
+    
+    try:
+        dataset = load_dataset("MothMalone/SLMS-KD-Benchmarks", "casehold")
+        
+        def prepare_casehold_data(split_data):
+            data = []
+            for item in split_data:
+                # Combine citing prompt with all holdings for context
+                text_features = item['citing_prompt']
+                for i in range(5):  # holdings 0-4
+                    text_features += f" [HOLDING_{i}] " + item[f'holding_{i}']
+                
+                data.append({
+                    'text': text_features,
+                    'label': item['label']
+                })
+            return pd.DataFrame(data)
+        
+        train_df = prepare_casehold_data(dataset['train'])
+        val_df = prepare_casehold_data(dataset['validation'])
+        test_df = prepare_casehold_data(dataset['test'])
+        
+        load_time = time.time() - start_time
+        logger.info(f"CaseHold loaded: Train={len(train_df)}, Val={len(val_df)}, Test={len(test_df)}")
+        logger.info(f"CaseHold loading time: {format_time(load_time)}")
+        return train_df, val_df, test_df, 'label'
+        
+    except Exception as e:
+        logger.error(f"Error loading CaseHold: {e}")
+        return None, None, None, None
+        
+# Removed the specific casehold_imbalanced_from_csv function in favor of the generic load_dataset_from_csv
     
 
-def run_fast_experiment():
-    """Run fast experiment on ANLI R1 only"""
+def run_fast_experiment(dataset_path=None, dataset_name=None, label_column='label'):
+    """Run fast experiment on a dataset
+    
+    Args:
+        dataset_path: Path to directory containing CSV files (train_subset.csv, val_subset.csv, test_subset.csv)
+                     If None, will use dataset_name to determine path
+        dataset_name: Name of the dataset (for logging and to determine path if dataset_path is None)
+                     One of 'anli_r1', 'anli_r1_noisy', or 'casehold_imbalanced', etc.
+        label_column: Name of the label column (defaults to 'label')
+    """
     total_start = time.time()
+    
+    # If dataset_path is not provided, use dataset_name to determine it
+    if dataset_path is None:
+        if dataset_name == 'anli_r1':
+            # Use the load_dataset function for the original ANLI dataset
+            train_df, val_df, test_df, target_col = load_anli_dataset()
+        elif dataset_name == 'casehold':
+            # Use the load_dataset function for the original CaseHold dataset
+            train_df, val_df, test_df, target_col = load_casehold_dataset()
+        elif dataset_name:
+            # For other datasets, construct the path from the name
+            dataset_path = f"/storage/nammt/autogluon/{dataset_name}"
+            train_df, val_df, test_df, target_col = load_dataset_from_csv(
+                dataset_path, dataset_name, label_column)
+        else:
+            logger.error("Either dataset_path or dataset_name must be provided")
+            return
+    else:
+        # Use the provided path
+        train_df, val_df, test_df, target_col = load_dataset_from_csv(
+            dataset_path, dataset_name, label_column)
+    
+    # Use dataset_name for logging if provided, otherwise use the path
+    display_name = dataset_name or os.path.basename(dataset_path)
+    
     logger.info("="*80)
-    logger.info("FAST FIXED META-LEARNING EXPERIMENT - ANLI R1 ONLY")
+    logger.info(f"FAST FIXED META-LEARNING EXPERIMENT - {display_name.upper()}")
     logger.info(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("="*80)
-
-    # 1. Load data
-    train_df, val_df, test_df, target_col = load_anli_dataset()
+        
     if train_df is None:
         logger.error("Failed to load dataset")
         return
@@ -1192,8 +1278,8 @@ def run_fast_experiment():
 
     autogluon_start = time.time()
 
-    # Create model directory
-    model_dir = "./anli_r1_model"
+    # Create model directory based on dataset name
+    model_dir = f"./{display_name}_model"
     os.makedirs(model_dir, exist_ok=True)
 
     # Use your exact train_text_model method for ANLI R1
@@ -1228,7 +1314,7 @@ def run_fast_experiment():
 
     # Train using your exact method
     predictor, training_time = train_text_model(
-        processed_train, processed_val, target_col, "anli_r1", model_dir, autogluon_start
+        processed_train, processed_val, target_col, display_name, model_dir, autogluon_start
     )
 
     # 5. Evaluate
@@ -1297,10 +1383,28 @@ def run_fast_experiment():
     }
 
     import json
-    with open('fast_experiment_results.json', 'w') as f:
+    results_file = f'{display_name}_fast_experiment_results.json'
+    with open(results_file, 'w') as f:
         json.dump(results, f, indent=2)
 
-    logger.info("Results saved to fast_experiment_results.json")
+    logger.info(f"Results saved to {results_file}")
 
 if __name__ == "__main__":
-    run_fast_experiment()
+    import sys
+    import argparse
+    
+    # Create command line parser
+    parser = argparse.ArgumentParser(description='Run fast meta-learning experiment')
+    parser.add_argument('--path', type=str, help='Path to directory containing CSV files')
+    parser.add_argument('--dataset', type=str, help='Dataset name (anli_r1, anli_r1_noisy, casehold_imbalanced, etc.)')
+    parser.add_argument('--label', type=str, default='label', help='Name of the label column (default: label)')
+    
+    args = parser.parse_args()
+    
+    # If neither path nor dataset is provided, default to anli_r1
+    if not args.path and not args.dataset:
+        print("No dataset specified, using default: anli_r1")
+        args.dataset = 'anli_r1'
+    
+    # Run experiment with provided parameters
+    run_fast_experiment(dataset_path=args.path, dataset_name=args.dataset, label_column=args.label)

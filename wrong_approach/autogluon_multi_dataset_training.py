@@ -35,6 +35,74 @@ logger = logging.getLogger(__name__)
 
 warnings.filterwarnings('ignore')
 
+def format_time(seconds):
+    if seconds < 60:
+        return f"{seconds:.2f} seconds"
+    elif seconds < 3600:
+        minutes = seconds // 60
+        secs = seconds % 60
+        return f"{int(minutes)}m {secs:.1f}s"
+    else:
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        return f"{int(hours)}h {int(minutes)}m {secs:.1f}s"
+
+
+
+def load_dataset_from_csv(base_path, dataset_name=None, label_column='label'):
+    """Generic function to load any dataset from CSV files
+    
+    Args:
+        base_path: Path to directory containing train_subset.csv, val_subset.csv, and test_subset.csv
+        dataset_name: Optional name for logging purposes
+        label_column: Name of the label column (defaults to 'label')
+    
+    Returns:
+        train_df, val_df, test_df, label_column
+    """
+    start_time = time.time()
+    if dataset_name:
+        logger.info(f"Loading {dataset_name} dataset from {base_path}...")
+    else:
+        logger.info(f"Loading dataset from {base_path}...")
+
+    try:
+        train_df = pd.read_csv(f"{base_path}/train_subset.csv")
+        val_df = pd.read_csv(f"{base_path}/val_subset.csv")
+        test_df = pd.read_csv(f"{base_path}/test_subset.csv")
+        
+        # Ensure text column exists - construct if needed based on available columns
+        if 'text' not in train_df.columns:
+            # For ANLI
+            if 'premise' in train_df.columns and 'hypothesis' in train_df.columns:
+                for df in [train_df, val_df, test_df]:
+                    df['text'] = df['premise'] + " [SEP] " + df['hypothesis']
+            # For CaseHold
+            elif 'citing_prompt' in train_df.columns and 'holding_0' in train_df.columns:
+                for df in [train_df, val_df, test_df]:
+                    # Create text column by concatenating citing_prompt with all holdings
+                    text_parts = [df['citing_prompt'].astype(str)]
+                    for i in range(5):
+                        if f'holding_{i}' in df.columns:
+                            text_parts.append(df[f'holding_{i}'].astype(str))
+                    df['text'] = " [SEP] ".join(text_parts)
+        
+        load_time = time.time() - start_time
+        logger.info(f"Dataset loaded from CSV in {format_time(load_time)}")
+        logger.info(f"Sizes - Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
+        
+        if label_column not in train_df.columns:
+            available_columns = train_df.columns.tolist()
+            logger.error(f"Label column '{label_column}' not found. Available columns: {available_columns}")
+            return None, None, None, None
+            
+        return train_df, val_df, test_df, label_column
+
+    except Exception as e:
+        logger.error(f"Error loading dataset from CSV: {e}")
+        return None, None, None, None
+
 class AutoGluonMultiDatasetTrainer:
 
     def __init__(self, output_dir="./autogluon_multi_results"):
@@ -999,7 +1067,9 @@ class AutoGluonMultiDatasetTrainer:
             # ("casehold", self.load_casehold_dataset),
             # ("scienceqa", self.load_scienceqa_dataset),
             # ("anli_r1", self.load_anli_dataset),
-            ("temperature_rain", self.load_temperature_rain_dataset)
+            # ("temperature_rain", self.load_temperature_rain_dataset)
+            # ("casehold_imbalanced", lambda: load_dataset_from_csv("/storage/nammt/autogluon/casehold_imbalanced", "casehold_imbalanced", "label"))
+            ("anli_r1_noisy", lambda: load_dataset_from_csv("/storage/nammt/autogluon/anli_r1_noisy", "anli_r1_noisy", "label"))
         ]
         
         all_results = []
@@ -1017,6 +1087,7 @@ class AutoGluonMultiDatasetTrainer:
                     logger.warning(f"Skipping {dataset_name} due to loading error")
                     continue
                 
+
                 # Train model
                 predictor, training_time = self.train_model(
                     train_df, val_df, target_col, dataset_name
