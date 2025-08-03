@@ -1,0 +1,45 @@
+# AutoGluon configuration with 13 models and no HPO
+
+autogluon:
+  # Core settings - let AutoGluon auto-detect
+  problem_type: "auto"
+  eval_metric: "auto"
+
+  # Training configuration
+  time_limit: 300       # 5 minutes default
+  presets: "medium_quality"  # Use AutoGluon's default preset
+  verbosity: 2
+
+  # Use available model types (based on AutoGluon tabular models)
+  included_model_types:
+    - "GBM"        # Gradient boosting (LightGBM variants)
+    - "CAT"        # CatBoost
+    - "XGB"        # XGBoost
+    - "RF"         # Random Forest
+    - "XT"         # Extra Trees
+    - "KNN"        # K-Nearest Neighbors
+    - "LR"         # Logistic Regression
+    - "NN_TORCH"   # Neural Networks (PyTorch)
+    - "FASTAI"     # FastAI Neural Networks
+    - "NN_MXNET"   # MXNet Neural Networks (if available)
+    - "TABPFN"     # TabPFN (if available)
+    - "DUMMY"      # Dummy classifier
+    - "NB"         # Naive Bayes
+
+  # Disable hyperparameter optimization for speed
+  hyperparameter_tune_kwargs: null
+
+  # Memory settings
+  ag_args_fit:
+    ag.max_memory_usage_ratio: 5  # Allow more memory usage
+
+  # Reproducibility
+  seed: 42
+
+# Evaluation settings
+evaluation:
+  metrics:
+    primary: "accuracy"
+    secondary: 
+      - "f1_macro"
+      - "f1_weighted"
