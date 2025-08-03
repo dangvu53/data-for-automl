@@ -244,7 +244,6 @@ def train_autogluon_classifier(train_df, test_df, target_column='label', time_li
         predictor.fit(
             train_data=train_df,
             time_limit=time_limit,
-            hyperparameter_tune_kwargs='auto',
             presets=['best_quality'],  # Use best quality for text classification
         )
         
