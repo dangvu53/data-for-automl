@@ -43,7 +43,6 @@ datasets:
       max_samples: 50000
       description: "Movie reviews with highly subjective sentiment labels and many borderline or ambiguous cases."
       quality_issues: ["label_noise", "subjective_labels", "borderline_cases"]
-      
     financial_phrasebank:
       name: "Financial PhraseBank"
       source: hf_repo
@@ -69,7 +68,7 @@ datasets:
       max_samples: 10000
       description: "Well-defined question classification with clean labels, serving as a high-quality baseline."
       quality_issues: ["minimal"]
-    
+
     MASSIVE:
       name: "MASSIVE Intent Classification"
       source: hf_repo
