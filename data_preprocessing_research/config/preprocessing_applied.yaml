@@ -1,0 +1,300 @@
+datasets:
+  clean_baselines:
+    MASSIVE:
+      config_name: MASSIVE
+      description: A large, clean, and well-structured intent classification dataset
+        for baseline performance.
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      name: MASSIVE Intent Classification
+      quality_issues: &id001
+      - class_imbalance
+      source: hf_repo
+      target_column: label
+      task_type: multi_classification
+      text_columns: &id002
+      - text
+    trec:
+      config_name: trec
+      description: Well-defined question classification with clean labels, serving
+        as a high-quality baseline.
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      name: TREC Question Classification
+      quality_issues: &id011
+      - class_imbalance
+      source: hf_repo
+      target_column: label
+      task_type: multi_classification
+      text_columns: &id012
+      - text
+  imbalance:
+    banking77:
+      config_name: banking77
+      description: Customer service queries with 77 intents, featuring a long-tail
+        distribution and high imbalance.
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      name: Banking77 Intents
+      quality_issues: &id005
+      - class_imbalance
+      source: hf_repo
+      target_column: label
+      task_type: multi_classification
+      text_columns: &id006
+      - text
+  noise:
+    financial_phrasebank:
+      config_name: financial_phrasebank
+      description: Financial news sentences where sentiment can be highly subjective
+        and context-dependent.
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      name: Financial PhraseBank
+      quality_issues: &id007
+      - class_imbalance
+      source: hf_repo
+      target_column: label
+      task_type: multi_classification
+      text_columns: &id008
+      - text
+    imdb:
+      config_name: imdb
+      description: Movie reviews with highly subjective sentiment labels and many
+        borderline or ambiguous cases.
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      name: IMDB Movie Reviews
+      quality_issues: &id009
+      - redundant
+      source: hf_repo
+      target_column: label
+      task_type: binary_classification
+      text_columns: &id010
+      - text
+  redundancy:
+    twenty_newsgroups:
+      config_name: twenty_newsgroups
+      description: Newsgroup posts with significant topic overlap and cross-posting
+        between 20 categories.
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      name: 20 Newsgroups
+      quality_issues: &id013
+      - noisy
+      source: hf_repo
+      target_column: label
+      task_type: multi_classification
+      text_columns: &id014
+      - text
+global_settings:
+  cache_dir: datasets/processed
+  random_seed: 42
+  test_split: 0.2
+  validation_split: 0.1
+preprocessed_datasets:
+  MASSIVE:
+    config_name: MASSIVE
+    description: A large, clean, and well-structured intent classification dataset
+      for baseline performance.
+    hf_id: MothMalone/data-preprocessing-automl-benchmarks
+    name: MASSIVE Intent Classification
+    preprocessed: true
+    preprocessed_path: prepared_datasets/MASSIVE_preprocessed
+    preprocessing_config:
+      steps: &id003
+      - enabled: true
+        params:
+          contamination: 0.05
+          n_neighbors: 20
+          random_state: 42
+          strategy: isolation-forest
+          threshold: 3.0
+        type: outlier
+      - enabled: true
+        params:
+          cross_label_duplicates: false
+          random_state: 42
+          similarity_metric: cosine
+          similarity_threshold: 0.9
+          strategy: approximate
+        type: duplicate
+      - enabled: true
+        params:
+          eda_alpha: 0.1
+          eda_num_aug: 4
+          k_neighbors: 5
+          random_state: 42
+          sampling_strategy: auto
+          strategy: random-oversampling
+        type: imbalance
+      variations: &id004
+        comprehensive_noise:
+          steps:
+          - enabled: true
+            params:
+              contamination: 0.1
+              random_state: 42
+              strategy: isolation-forest
+            type: outlier
+          - enabled: true
+            params:
+              cross_label_duplicates: true
+              strategy: exact
+            type: duplicate
+        comprehensive_outliers:
+          steps:
+          - enabled: true
+            params:
+              strategy: z-score
+              threshold: 2.0
+            type: outlier
+          - enabled: true
+            params:
+              contamination: 0.05
+              strategy: isolation-forest
+            type: outlier
+        full:
+          steps:
+          - enabled: true
+            params:
+              contamination: 0.05
+              strategy: isolation-forest
+            type: outlier
+          - enabled: true
+            params:
+              similarity_threshold: 0.9
+              strategy: approximate
+            type: duplicate
+          - enabled: true
+            params:
+              sampling_strategy: auto
+              strategy: smote
+            type: imbalance
+          - edited_nearest_neighbors
+        imbalanced_with_duplicates:
+          steps:
+          - enabled: true
+            params:
+              cross_label_duplicates: false
+              random_state: 42
+              similarity_metric: cosine
+              similarity_threshold: 0.9
+              strategy: approximate
+            type: duplicate
+          - enabled: true
+            params:
+              random_state: 42
+              sampling_strategy: auto
+              strategy: random-oversampling
+            type: imbalance
+        medium:
+          steps:
+          - enabled: true
+            params:
+              strategy: z-score
+              threshold: 3.0
+            type: outlier
+          - enabled: true
+            params:
+              strategy: exact
+            type: duplicate
+        minimal:
+          steps:
+          - enabled: true
+            params:
+              strategy: exact
+            type: duplicate
+        noisy_data:
+          steps:
+          - enabled: true
+            params:
+              contamination: 0.1
+              random_state: 42
+              strategy: isolation-forest
+            type: outlier
+          - enabled: true
+            params:
+              cross_label_duplicates: true
+              random_state: 42
+              strategy: exact
+            type: duplicate
+    quality_issues: *id001
+    source: hf_repo
+    target_column: label
+    task_type: multi_classification
+    text_columns: *id002
+  banking77:
+    config_name: banking77
+    description: Customer service queries with 77 intents, featuring a long-tail distribution
+      and high imbalance.
+    hf_id: MothMalone/data-preprocessing-automl-benchmarks
+    name: Banking77 Intents
+    preprocessed: true
+    preprocessed_path: prepared_datasets/banking77_preprocessed
+    preprocessing_config:
+      steps: *id003
+      variations: *id004
+    quality_issues: *id005
+    source: hf_repo
+    target_column: label
+    task_type: multi_classification
+    text_columns: *id006
+  financial_phrasebank:
+    config_name: financial_phrasebank
+    description: Financial news sentences where sentiment can be highly subjective
+      and context-dependent.
+    hf_id: MothMalone/data-preprocessing-automl-benchmarks
+    name: Financial PhraseBank
+    preprocessed: true
+    preprocessed_path: prepared_datasets/financial_phrasebank_preprocessed
+    preprocessing_config:
+      steps: *id003
+      variations: *id004
+    quality_issues: *id007
+    source: hf_repo
+    target_column: label
+    task_type: multi_classification
+    text_columns: *id008
+  imdb:
+    config_name: imdb
+    description: Movie reviews with highly subjective sentiment labels and many borderline
+      or ambiguous cases.
+    hf_id: MothMalone/data-preprocessing-automl-benchmarks
+    name: IMDB Movie Reviews
+    preprocessed: true
+    preprocessed_path: prepared_datasets/imdb_preprocessed
+    preprocessing_config:
+      steps: *id003
+      variations: *id004
+    quality_issues: *id009
+    source: hf_repo
+    target_column: label
+    task_type: binary_classification
+    text_columns: *id010
+  trec:
+    config_name: trec
+    description: Well-defined question classification with clean labels, serving as
+      a high-quality baseline.
+    hf_id: MothMalone/data-preprocessing-automl-benchmarks
+    name: TREC Question Classification
+    preprocessed: true
+    preprocessed_path: prepared_datasets/trec_preprocessed
+    preprocessing_config:
+      steps: *id003
+      variations: *id004
+    quality_issues: *id011
+    source: hf_repo
+    target_column: label
+    task_type: multi_classification
+    text_columns: *id012
+  twenty_newsgroups:
+    config_name: twenty_newsgroups
+    description: Newsgroup posts with significant topic overlap and cross-posting
+      between 20 categories.
+    hf_id: MothMalone/data-preprocessing-automl-benchmarks
+    name: 20 Newsgroups
+    preprocessed: true
+    preprocessed_path: prepared_datasets/twenty_newsgroups_preprocessed
+    preprocessing_config:
+      steps: *id003
+      variations: *id004
+    quality_issues: *id013
+    source: hf_repo
+    target_column: label
+    task_type: multi_classification
+    text_columns: *id014

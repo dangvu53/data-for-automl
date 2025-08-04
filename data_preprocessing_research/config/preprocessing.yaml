@@ -91,25 +91,156 @@ preprocessing_methods:
 pipelines:
   comprehensive_redundancy:
     steps:
-      - "duplicate_removal"
-      - "near_duplicate_removal"
-      - "data_selection"
+      - type: duplicate
+        enabled: true
+        params:
+          strategy: exact
+      - type: duplicate
+        enabled: true
+        params:
+          strategy: approximate
+          similarity_threshold: 0.95
       
   comprehensive_imbalance:
     steps:
-      - "smote"
+      - type: imbalance
+        enabled: true
+        params:
+          strategy: smote
+          sampling_strategy: auto
+          random_state: 42
+
+# New implementation - Preprocessing steps for the pipeline
+steps:
+  # Outlier Detection
+  - type: outlier
+    enabled: true
+    params:
+      strategy: isolation-forest  # Options: z-score, iqr, lof, isolation-forest
+      contamination: 0.05         # Proportion of samples to be identified as outliers
+      threshold: 3.0              # Threshold for z-score and iqr strategies
+      n_neighbors: 20             # Number of neighbors for lof strategy
+      random_state: 42
+
+  # Duplicate Removal
+  - type: duplicate
+    enabled: true
+    params:
+      strategy: approximate       # Options: exact, approximate
+      similarity_threshold: 0.9   # Threshold for approximate similarity (0-1)
+      similarity_metric: cosine  # Options: levenshtein, jaccard, cosine, etc.
+      cross_label_duplicates: false   # Whether to consider duplicates across different labels
+      random_state: 42
+
+  # Imbalance Handling
+  - type: imbalance
+    enabled: true
+    params:
+      strategy: random-oversampling  # Options: random-oversampling, smote, adasyn, eda
+      sampling_strategy: auto        # Options: auto, minority, not minority, not majority, or float
+      random_state: 42
+      k_neighbors: 5                 # For SMOTE and ADASYN
+      eda_alpha: 0.1                 # For EDA
+      eda_num_aug: 4                 # For EDA
+
+# Preprocessing variations for experiments
+variations:
+  minimal:
+    steps:
+      - type: duplicate
+        enabled: true
+        params:
+          strategy: exact
+  
+  medium:
+    steps:
+      - type: outlier
+        enabled: true
+        params:
+          strategy: z-score
+          threshold: 3.0
+      - type: duplicate
+        enabled: true
+        params:
+          strategy: exact
+  
+  full:
+    steps:
+      - type: outlier
+        enabled: true
+        params:
+          strategy: isolation-forest
+          contamination: 0.05
+      - type: duplicate
+        enabled: true
+        params:
+          strategy: approximate
+          similarity_threshold: 0.9
+      - type: imbalance
+        enabled: true
+        params:
+          strategy: smote
+          sampling_strategy: auto
       - "edited_nearest_neighbors"
+      
+  imbalanced_with_duplicates:
+    steps:
+      - type: duplicate
+        enabled: true
+        params:
+          strategy: approximate
+          similarity_threshold: 0.9
+          similarity_metric: cosine
+          cross_label_duplicates: false
+          random_state: 42
+      - type: imbalance
+        enabled: true
+        params:
+          strategy: random-oversampling
+          sampling_strategy: auto
+          random_state: 42
+      
+  noisy_data:
+    steps:
+      - type: outlier
+        enabled: true
+        params:
+          strategy: isolation-forest
+          contamination: 0.1
+          random_state: 42
+      - type: duplicate
+        enabled: true
+        params:
+          strategy: exact
+          cross_label_duplicates: true
+          random_state: 42
       
   comprehensive_noise:
     steps:
-      - "confident_learning"
-      - "isolation_forest"
+      - type: outlier
+        enabled: true
+        params:
+          strategy: isolation-forest
+          contamination: 0.1
+          random_state: 42
+      - type: duplicate
+        enabled: true
+        params:
+          strategy: exact
+          cross_label_duplicates: true
       
   comprehensive_outliers:
     steps:
-      - "statistical_outliers"
-      - "embedding_outliers"
-      - "robust_scaling"
+      - type: outlier
+        enabled: true
+        params:
+          strategy: z-score
+          threshold: 2.0
+      - type: outlier
+        enabled: true
+        params:
+          strategy: isolation-forest
+          contamination: 0.05
 
 # Global preprocessing settings
 global_settings:
@@ -117,3 +248,4 @@ global_settings:
   n_jobs: -1  # Use all available cores
   cache_preprocessed: true
   validation_split: 0.1
+  prevent_data_leakage: true  # Ensures preprocessing methods prevent leakage across train/val/test

@@ -14,6 +14,9 @@ imbalanced-learn>=0.12.0  # SMOTE and other sampling techniques
 cleanlab>=2.6.0           # Noisy data detection and cleaning
 pyod>=2.0.0              # Outlier detection
 dedupe>=2.0.0            # Duplicate detection
+fuzzywuzzy>=0.18.0       # Fuzzy string matching
+python-Levenshtein>=0.20.0 # Faster Levenshtein distance calculation
+textdistance>=4.6.0      # Text distance/similarity metrics
 
 # Visualization and analysis
 matplotlib>=3.10.0

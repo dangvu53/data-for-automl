@@ -130,30 +130,14 @@ class DatasetLoader:
         # Your repository ID
         repo_id = "MothMalone/data-preprocessing-automl-benchmarks"
 
-        # Maximum rows per split
-        max_rows = 50000
-
         try:
             # Load dataset from your repository
             dataset = load_dataset(repo_id, dataset_name)
 
-            # Convert to pandas DataFrames with row limits
+            # Convert to pandas DataFrames without row limits
             train_data = dataset["train"].to_pandas()
             val_data = dataset["validation"].to_pandas()
             test_data = dataset["test"].to_pandas()
-
-            # Apply row limits
-            if len(train_data) > max_rows:
-                logger.info(f"Limiting train data from {len(train_data)} to {max_rows} rows")
-                train_data = train_data.sample(n=max_rows, random_state=42).reset_index(drop=True)
-
-            if len(val_data) > max_rows:
-                logger.info(f"Limiting validation data from {len(val_data)} to {max_rows} rows")
-                val_data = val_data.sample(n=max_rows, random_state=42).reset_index(drop=True)
-
-            if len(test_data) > max_rows:
-                logger.info(f"Limiting test data from {len(test_data)} to {max_rows} rows")
-                test_data = test_data.sample(n=max_rows, random_state=42).reset_index(drop=True)
 
             logger.info(f"Loaded {dataset_name}: {len(train_data)} train, {len(val_data)} val, {len(test_data)} test")
 
