@@ -1,0 +1,90 @@
+# Real Dataset configurations for preprocessing research
+# Each dataset is categorized by its primary data quality issue
+
+datasets:
+  # Datasets with high redundancy/duplicate content
+  redundancy:
+    twenty_newsgroups:
+      name: "20 Newsgroups"
+      source: hf_repo
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      config_name: twenty_newsgroups
+      task_type: multi_classification
+      target_column: "label"
+      text_columns: ["text"]
+      max_samples: 50000
+      description: "Newsgroup posts with significant topic overlap and cross-posting between 20 categories."
+      quality_issues: ["redundancy", "cross_posting", "similar_topics"]
+
+  # Datasets with significant class imbalance
+  imbalance:
+    banking77:
+      name: "Banking77 Intents"
+      source: hf_repo
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      config_name: banking77
+      task_type: multi_classification
+      target_column: "label"
+      text_columns: ["text"]
+      max_samples: 50000
+      description: "Customer service queries with 77 intents, featuring a long-tail distribution and high imbalance."
+      quality_issues: ["class_imbalance", "fine_grained_classes"]
+
+  # Datasets with label noise and class overlap
+  noise:
+    imdb:
+      name: "IMDB Movie Reviews"
+      source: hf_repo
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      config_name: imdb
+      task_type: binary_classification
+      target_column: "label"
+      text_columns: ["text"]
+      max_samples: 50000
+      description: "Movie reviews with highly subjective sentiment labels and many borderline or ambiguous cases."
+      quality_issues: ["label_noise", "subjective_labels", "borderline_cases"]
+      
+    financial_phrasebank:
+      name: "Financial PhraseBank"
+      source: hf_repo
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      config_name: financial_phrasebank
+      task_type: multi_classification
+      target_column: "label"
+      text_columns: ["text"]
+      max_samples: 10000
+      description: "Financial news sentences where sentiment can be highly subjective and context-dependent."
+      quality_issues: ["label_noise", "subjective_labels", "context_dependency"]
+
+  # Additional high-quality datasets for comparison
+  clean_baselines:
+    trec:
+      name: "TREC Question Classification"
+      source: hf_repo
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      config_name: trec
+      task_type: multi_classification
+      target_column: "label"
+      text_columns: ["text"]
+      max_samples: 10000
+      description: "Well-defined question classification with clean labels, serving as a high-quality baseline."
+      quality_issues: ["minimal"]
+    
+    MASSIVE:
+      name: "MASSIVE Intent Classification"
+      source: hf_repo
+      hf_id: MothMalone/data-preprocessing-automl-benchmarks
+      config_name: MASSIVE
+      task_type: multi_classification
+      target_column: "label"
+      text_columns: ["text"]
+      max_samples: 50000
+      description: "A large, clean, and well-structured intent classification dataset for baseline performance."
+      quality_issues: ["minimal"]
+
+# Global settings that can be used as defaults if not specified in the dataset config
+global_settings:
+  random_seed: 42
+  test_split: 0.2
+  validation_split: 0.1
+  cache_dir: "datasets/processed"

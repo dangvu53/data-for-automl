@@ -21,6 +21,30 @@ meta_autogluon_results/
 autogluon_multi_results/
 temp_data/
 
+wrong_approach/autogluon_comparison_results/
+wrong_approach/autogluon_challenging_results/
+wrong_approach/autogluon_cleaned_results/
+wrong_approach/autogluon_before_results/
+
+
+wrong_approach/anli_r1_full/
+wrong_approach/anli_r1_model/
+wrong_approach/anli_r1_noisy_model/
+
+
+wrong_approach/casehold_full/
+wrong_approach/casehold_imbalanced_model/
+
+
+wrong_approach/preprocessed_cache/
+wrong_approach/pipeline_results
+wrong_approach/*.log
+
+wrong_approach/anli_r1_noisy_fast_experiment_results.json
+wrong_approach/casehold_imbalanced_fast_experiment_results.json
+
+
+
 # Large data files
 *.zip
 *.tsf
@@ -44,3 +68,5 @@ Thumbs.db
 
 # Other ML outputs
 openml_models/
+
+data_preprocessing_research/prepared_datasets

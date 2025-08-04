@@ -1,0 +1,119 @@
+# Preprocessing method configurations
+
+preprocessing_methods:
+  # Redundancy and duplicate handling
+  redundancy:
+    duplicate_removal:
+      method: "exact_duplicates"
+      parameters:
+        keep: "first"  # Keep first occurrence
+        
+    near_duplicate_removal:
+      method: "similarity_based"
+      parameters:
+        similarity_threshold: 0.95
+        embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+        
+    data_selection:
+      method: "diversity_sampling"
+      parameters:
+        selection_ratio: 0.8
+        diversity_metric: "cosine_distance"
+
+  # Class imbalance handling
+  imbalance:
+    smote:
+      method: "SMOTE"
+      parameters:
+        sampling_strategy: "auto"
+        k_neighbors: 5
+        random_state: 42
+        
+    borderline_smote:
+      method: "BorderlineSMOTE"
+      parameters:
+        sampling_strategy: "auto"
+        k_neighbors: 5
+        random_state: 42
+        
+    random_undersampling:
+      method: "RandomUnderSampler"
+      parameters:
+        sampling_strategy: "auto"
+        random_state: 42
+        
+    edited_nearest_neighbors:
+      method: "EditedNearestNeighbours"
+      parameters:
+        n_neighbors: 3
+        kind_sel: "all"
+
+  # Noise and overlap handling
+  noise:
+    confident_learning:
+      method: "CleanLab"
+      parameters:
+        cv_n_folds: 5
+        prune_method: "prune_by_noise_rate"
+        
+    isolation_forest:
+      method: "IsolationForest"
+      parameters:
+        contamination: 0.1
+        random_state: 42
+        
+    local_outlier_factor:
+      method: "LocalOutlierFactor"
+      parameters:
+        n_neighbors: 20
+        contamination: 0.1
+
+  # Outlier detection and handling
+  outliers:
+    statistical_outliers:
+      method: "IQR"
+      parameters:
+        multiplier: 1.5
+        features: ["text_length", "word_count"]
+        
+    embedding_outliers:
+      method: "EmbeddingOutliers"
+      parameters:
+        contamination: 0.05
+        embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+        
+    robust_scaling:
+      method: "RobustScaler"
+      parameters:
+        quantile_range: [25.0, 75.0]
+
+# Preprocessing pipelines (combinations of methods)
+pipelines:
+  comprehensive_redundancy:
+    steps:
+      - "duplicate_removal"
+      - "near_duplicate_removal"
+      - "data_selection"
+      
+  comprehensive_imbalance:
+    steps:
+      - "smote"
+      - "edited_nearest_neighbors"
+      
+  comprehensive_noise:
+    steps:
+      - "confident_learning"
+      - "isolation_forest"
+      
+  comprehensive_outliers:
+    steps:
+      - "statistical_outliers"
+      - "embedding_outliers"
+      - "robust_scaling"
+
+# Global preprocessing settings
+global_settings:
+  random_seed: 42
+  n_jobs: -1  # Use all available cores
+  cache_preprocessed: true
+  validation_split: 0.1
