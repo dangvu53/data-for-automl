@@ -12,9 +12,9 @@ datasets:
       task_type: multi_classification
       target_column: "label"
       text_columns: ["text"]
-      max_samples: 50000
+      # Removed max_samples limit to use full dataset
       description: "Newsgroup posts with significant topic overlap and cross-posting between 20 categories."
-      quality_issues: ["redundancy", "cross_posting", "similar_topics"]
+      quality_issues: ["noisy"]
 
   # Datasets with significant class imbalance
   imbalance:
@@ -26,9 +26,10 @@ datasets:
       task_type: multi_classification
       target_column: "label"
       text_columns: ["text"]
-      max_samples: 50000
+      # Removed max_samples limit to use full dataset
       description: "Customer service queries with 77 intents, featuring a long-tail distribution and high imbalance."
-      quality_issues: ["class_imbalance", "fine_grained_classes"]
+      # quality_issues: ["class_imbalance", "fine_grained_classes", "near-duplicate"]
+      quality_issues: ["class_imbalance"]
 
   # Datasets with label noise and class overlap
   noise:
@@ -40,9 +41,11 @@ datasets:
       task_type: binary_classification
       target_column: "label"
       text_columns: ["text"]
-      max_samples: 50000
+      # Removed max_samples limit to use full dataset
       description: "Movie reviews with highly subjective sentiment labels and many borderline or ambiguous cases."
-      quality_issues: ["label_noise", "subjective_labels", "borderline_cases"]
+      # quality_issues: ["redundant", "outlier", "noisy"]
+      quality_issues: ["redundant"]
+
       
     financial_phrasebank:
       name: "Financial PhraseBank"
@@ -52,9 +55,10 @@ datasets:
       task_type: multi_classification
       target_column: "label"
       text_columns: ["text"]
-      max_samples: 10000
+      # Removed max_samples limit to use full dataset
       description: "Financial news sentences where sentiment can be highly subjective and context-dependent."
-      quality_issues: ["label_noise", "subjective_labels", "context_dependency"]
+      # quality_issues: ["class_imbalance", "context_dependency", "small_dataset"]
+      quality_issues: ["class_imbalance"]
 
   # Additional high-quality datasets for comparison
   clean_baselines:
@@ -66,9 +70,10 @@ datasets:
       task_type: multi_classification
       target_column: "label"
       text_columns: ["text"]
-      max_samples: 10000
+      # Removed max_samples limit to use full dataset
       description: "Well-defined question classification with clean labels, serving as a high-quality baseline."
-      quality_issues: ["minimal"]
+      # quality_issues: ["class_imbalance", "near-duplicate", "outlier"]
+      quality_issues: ["class_imbalance"]
     
     MASSIVE:
       name: "MASSIVE Intent Classification"
@@ -78,9 +83,10 @@ datasets:
       task_type: multi_classification
       target_column: "label"
       text_columns: ["text"]
-      max_samples: 50000
+      # Removed max_samples limit to use full dataset
       description: "A large, clean, and well-structured intent classification dataset for baseline performance."
-      quality_issues: ["minimal"]
+      # quality_issues: ["class_imbalance", "near-duplicate", "outlier", "noisy"]
+      quality_issues: ["class_imbalance"]
 
 # Global settings that can be used as defaults if not specified in the dataset config
 global_settings:
